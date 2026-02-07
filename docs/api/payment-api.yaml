@@ -1,0 +1,1119 @@
+openapi: 3.0.3
+info:
+  title: Fintech Payment Platform API
+  description: Enterprise payment platform with fraud detection and ledger management
+  version: 1.0.0
+  contact:
+    name: API Support
+    email: api-support@fintech-platform.com
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
+
+servers:
+  - url: https://api.fintech-platform.com/v1
+    description: Production server
+  - url: https://staging-api.fintech-platform.com/v1
+    description: Staging server
+  - url: http://localhost:3000/v1
+    description: Development server
+
+paths:
+  /payments:
+    post:
+      tags:
+        - Payments
+      summary: Create a new payment
+      description: Create a new payment with fraud detection and validation
+      operationId: createPayment
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreatePaymentRequest'
+      responses:
+        '201':
+          description: Payment created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaymentResponse'
+        '400':
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '429':
+          description: Too many requests
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+      security:
+        - bearerAuth: []
+
+    get:
+      tags:
+        - Payments
+      summary: List payments
+      description: Retrieve a paginated list of payments with optional filtering
+      operationId: listPayments
+      parameters:
+        - name: page
+          in: query
+          description: Page number
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - name: limit
+          in: query
+          description: Number of items per page
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+        - name: userId
+          in: query
+          description: Filter by user ID
+          required: false
+          schema:
+            type: string
+        - name: state
+          in: query
+          description: Filter by payment state
+          required: false
+          schema:
+            $ref: '#/components/schemas/PaymentState'
+        - name: type
+          in: query
+          description: Filter by payment type
+          required: false
+          schema:
+            $ref: '#/components/schemas/PaymentType'
+        - name: currency
+          in: query
+          description: Filter by currency
+          required: false
+          schema:
+            type: string
+            pattern: '^[A-Z]{3}$'
+        - name: startDate
+          in: query
+          description: Filter by start date (ISO 8601)
+          required: false
+          schema:
+            type: string
+            format: date-time
+        - name: endDate
+          in: query
+          description: Filter by end date (ISO 8601)
+          required: false
+          schema:
+            type: string
+            format: date-time
+      responses:
+        '200':
+          description: List of payments
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedPaymentsResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+      security:
+        - bearerAuth: []
+
+  /payments/{paymentId}:
+    get:
+      tags:
+        - Payments
+      summary: Get payment details
+      description: Retrieve detailed information about a specific payment
+      operationId: getPayment
+      parameters:
+        - name: paymentId
+          in: path
+          required: true
+          description: Payment ID
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Payment details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaymentResponse'
+        '404':
+          description: Payment not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+      security:
+        - bearerAuth: []
+
+    put:
+      tags:
+        - Payments
+      summary: Update payment
+      description: Update payment information (limited fields)
+      operationId: updatePayment
+      parameters:
+        - name: paymentId
+          in: path
+          required: true
+          description: Payment ID
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdatePaymentRequest'
+      responses:
+        '200':
+          description: Payment updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaymentResponse'
+        '400':
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Payment not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+      security:
+        - bearerAuth: []
+
+  /payments/{paymentId}/process:
+    post:
+      tags:
+        - Payments
+      summary: Process payment
+      description: Process a pending payment
+      operationId: processPayment
+      parameters:
+        - name: paymentId
+          in: path
+          required: true
+          description: Payment ID
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Payment processed successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaymentResponse'
+        '400':
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Payment not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: Payment cannot be processed in current state
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+      security:
+        - bearerAuth: []
+
+  /payments/{paymentId}/confirm:
+    post:
+      tags:
+        - Payments
+      summary: Confirm payment
+      description: Confirm a payment with confirmation code
+      operationId: confirmPayment
+      parameters:
+        - name: paymentId
+          in: path
+          required: true
+          description: Payment ID
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ConfirmPaymentRequest'
+      responses:
+        '200':
+          description: Payment confirmed successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaymentResponse'
+        '400':
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Payment not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+      security:
+        - bearerAuth: []
+
+  /payments/{paymentId}/cancel:
+    post:
+      tags:
+        - Payments
+      summary: Cancel payment
+      description: Cancel a pending payment
+      operationId: cancelPayment
+      parameters:
+        - name: paymentId
+          in: path
+          required: true
+          description: Payment ID
+          schema:
+            type: string
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CancelPaymentRequest'
+      responses:
+        '200':
+          description: Payment cancelled successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaymentResponse'
+        '400':
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Payment not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: Payment cannot be cancelled in current state
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+      security:
+        - bearerAuth: []
+
+  /payments/{paymentId}/refund:
+    post:
+      tags:
+        - Payments
+      summary: Refund payment
+      description: Refund a completed payment
+      operationId: refundPayment
+      parameters:
+        - name: paymentId
+          in: path
+          required: true
+          description: Payment ID
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RefundPaymentRequest'
+      responses:
+        '200':
+          description: Payment refunded successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaymentResponse'
+        '400':
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Payment not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: Payment cannot be refunded in current state
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+      security:
+        - bearerAuth: []
+
+  /payment-links:
+    post:
+      tags:
+        - Payment Links
+      summary: Create payment link
+      description: Create a new payment link
+      operationId: createPaymentLink
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreatePaymentLinkRequest'
+      responses:
+        '201':
+          description: Payment link created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaymentLinkResponse'
+        '400':
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+      security:
+        - bearerAuth: []
+
+    get:
+      tags:
+        - Payment Links
+      summary: List payment links
+      description: Retrieve a paginated list of payment links
+      operationId: listPaymentLinks
+      parameters:
+        - name: page
+          in: query
+          description: Page number
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - name: limit
+          in: query
+          description: Number of items per page
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+        - name: isActive
+          in: query
+          description: Filter by active status
+          required: false
+          schema:
+            type: boolean
+      responses:
+        '200':
+          description: List of payment links
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedPaymentLinksResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+      security:
+        - bearerAuth: []
+
+  /payment-links/{linkId}:
+    get:
+      tags:
+        - Payment Links
+      summary: Get payment link
+      description: Retrieve payment link details
+      operationId: getPaymentLink
+      parameters:
+        - name: linkId
+          in: path
+          required: true
+          description: Payment link ID
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Payment link details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaymentLinkResponse'
+        '404':
+          description: Payment link not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+      security:
+        - bearerAuth: []
+
+  /payment-links/{linkId}/pay:
+    post:
+      tags:
+        - Payment Links
+      summary: Pay via payment link
+      description: Process payment through a payment link
+      operationId: payViaLink
+      parameters:
+        - name: linkId
+          in: path
+          required: true
+          description: Payment link ID
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PayViaLinkRequest'
+      responses:
+        '201':
+          description: Payment created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaymentResponse'
+        '400':
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Payment link not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '410':
+          description: Payment link expired or inactive
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+      security:
+        - bearerAuth: []
+
+components:
+  schemas:
+    Money:
+      type: object
+      required:
+        - amount
+        - currency
+        - precision
+      properties:
+        amount:
+          type: number
+          format: double
+          description: Monetary amount
+          example: 100.50
+        currency:
+          type: string
+          description: ISO 4217 currency code
+          pattern: '^[A-Z]{3}$'
+          example: USD
+        precision:
+          type: integer
+          description: Decimal precision
+          minimum: 0
+          maximum: 8
+          example: 2
+
+    PaymentState:
+      type: string
+      enum:
+        - PENDING
+        - PROCESSING
+        - COMPLETED
+        - FAILED
+        - CANCELLED
+        - REFUNDED
+        - EXPIRED
+        - CHARGEBACK
+        - PENDING_CONFIRMATION
+
+    PaymentType:
+      type: string
+      enum:
+        - PAYMENT_LINK
+        - DIRECT_PAYMENT
+        - WITHDRAWAL
+        - DEPOSIT
+        - REFUND
+        - CHARGEBACK
+
+    CreatePaymentRequest:
+      type: object
+      required:
+        - type
+        - amount
+        - senderId
+        - idempotencyKey
+      properties:
+        type:
+          $ref: '#/components/schemas/PaymentType'
+        amount:
+          $ref: '#/components/schemas/Money'
+        senderId:
+          type: string
+          description: Sender user ID
+          example: user_123456
+        receiverId:
+          type: string
+          description: Receiver user ID (optional for some payment types)
+          example: user_789012
+        description:
+          type: string
+          description: Payment description
+          example: Payment for services rendered
+        metadata:
+          type: object
+          description: Additional metadata
+          additionalProperties: true
+        idempotencyKey:
+          type: string
+          description: Unique key for idempotency
+          example: idemp_1234567890_abc123
+        expiresAt:
+          type: string
+          format: date-time
+          description: Payment expiration time
+
+    UpdatePaymentRequest:
+      type: object
+      properties:
+        description:
+          type: string
+          description: Updated payment description
+        metadata:
+          type: object
+          description: Updated metadata
+          additionalProperties: true
+
+    ConfirmPaymentRequest:
+      type: object
+      required:
+        - confirmationCode
+      properties:
+        confirmationCode:
+          type: string
+          description: Payment confirmation code
+          example: ABC123
+
+    CancelPaymentRequest:
+      type: object
+      properties:
+        reason:
+          type: string
+          description: Cancellation reason
+          example: Customer request
+
+    RefundPaymentRequest:
+      type: object
+      required:
+        - amount
+        - reason
+      properties:
+        amount:
+          $ref: '#/components/schemas/Money'
+        reason:
+          type: string
+          description: Refund reason
+          example: Product returned
+
+    CreatePaymentLinkRequest:
+      type: object
+      required:
+        - amount
+        - description
+      properties:
+        amount:
+          $ref: '#/components/schemas/Money'
+        description:
+          type: string
+          description: Payment link description
+          example: Payment for invoice #12345
+        metadata:
+          type: object
+          description: Additional metadata
+          additionalProperties: true
+        expiresAt:
+          type: string
+          format: date-time
+          description: Link expiration time
+        maxUses:
+          type: integer
+          minimum: 1
+          description: Maximum number of uses
+
+    PayViaLinkRequest:
+      type: object
+      required:
+        - senderId
+        - idempotencyKey
+      properties:
+        senderId:
+          type: string
+          description: Payer user ID
+          example: user_123456
+        idempotencyKey:
+          type: string
+          description: Unique key for idempotency
+          example: idemp_1234567890_def456
+
+    PaymentHold:
+      type: object
+      properties:
+        id:
+          type: string
+          description: Hold ID
+        paymentId:
+          type: string
+          description: Payment ID
+        amount:
+          $ref: '#/components/schemas/Money'
+        reason:
+          type: string
+          description: Hold reason
+        releaseAt:
+          type: string
+          format: date-time
+          description: Scheduled release time
+        isReleased:
+          type: boolean
+          description: Whether hold is released
+        createdAt:
+          type: string
+          format: date-time
+          description: Hold creation time
+        releasedAt:
+          type: string
+          format: date-time
+          description: Hold release time
+
+    Payment:
+      type: object
+      properties:
+        id:
+          type: string
+          description: Payment ID
+        type:
+          $ref: '#/components/schemas/PaymentType'
+        state:
+          $ref: '#/components/schemas/PaymentState'
+        amount:
+          $ref: '#/components/schemas/Money'
+        senderId:
+          type: string
+          description: Sender user ID
+        receiverId:
+          type: string
+          description: Receiver user ID
+        description:
+          type: string
+          description: Payment description
+        metadata:
+          type: object
+          description: Additional metadata
+          additionalProperties: true
+        idempotencyKey:
+          type: string
+          description: Idempotency key
+        createdAt:
+          type: string
+          format: date-time
+          description: Creation time
+        updatedAt:
+          type: string
+          format: date-time
+          description: Last update time
+        completedAt:
+          type: string
+          format: date-time
+          description: Completion time
+        expiresAt:
+          type: string
+          format: date-time
+          description: Expiration time
+        confirmationCode:
+          type: string
+          description: Confirmation code
+        failureReason:
+          type: string
+          description: Failure reason
+        riskScore:
+          type: number
+          description: Fraud risk score
+        holds:
+          type: array
+          items:
+            $ref: '#/components/schemas/PaymentHold'
+
+    PaymentLink:
+      type: object
+      properties:
+        id:
+          type: string
+          description: Payment link ID
+        paymentId:
+          type: string
+          description: Associated payment ID
+        url:
+          type: string
+          description: Payment link URL
+        expiresAt:
+          type: string
+          format: date-time
+          description: Expiration time
+        maxUses:
+          type: integer
+          description: Maximum uses
+        currentUses:
+          type: integer
+          description: Current uses
+        isActive:
+          type: boolean
+          description: Active status
+        metadata:
+          type: object
+          description: Additional metadata
+          additionalProperties: true
+        createdAt:
+          type: string
+          format: date-time
+          description: Creation time
+        updatedAt:
+          type: string
+          format: date-time
+          description: Last update time
+
+    Pagination:
+      type: object
+      properties:
+        page:
+          type: integer
+          description: Current page number
+        limit:
+          type: integer
+          description: Items per page
+        total:
+          type: integer
+          description: Total items
+        totalPages:
+          type: integer
+          description: Total pages
+        hasNext:
+          type: boolean
+          description: Has next page
+        hasPrev:
+          type: boolean
+          description: Has previous page
+
+    PaymentResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          description: Request success status
+        data:
+          $ref: '#/components/schemas/Payment'
+        correlationId:
+          type: string
+          description: Request correlation ID
+        timestamp:
+          type: string
+          format: date-time
+          description: Response timestamp
+
+    PaymentLinkResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          description: Request success status
+        data:
+          $ref: '#/components/schemas/PaymentLink'
+        correlationId:
+          type: string
+          description: Request correlation ID
+        timestamp:
+          type: string
+          format: date-time
+          description: Response timestamp
+
+    PaginatedPaymentsResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          description: Request success status
+        data:
+          type: object
+          properties:
+            items:
+              type: array
+              items:
+                $ref: '#/components/schemas/Payment'
+            pagination:
+              $ref: '#/components/schemas/Pagination'
+        correlationId:
+          type: string
+          description: Request correlation ID
+        timestamp:
+          type: string
+          format: date-time
+          description: Response timestamp
+
+    PaginatedPaymentLinksResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          description: Request success status
+        data:
+          type: object
+          properties:
+            items:
+              type: array
+              items:
+                $ref: '#/components/schemas/PaymentLink'
+            pagination:
+              $ref: '#/components/schemas/Pagination'
+        correlationId:
+          type: string
+          description: Request correlation ID
+        timestamp:
+          type: string
+          format: date-time
+          description: Response timestamp
+
+    ErrorResponse:
+      type: object
+      required:
+        - success
+        - error
+        - correlationId
+        - timestamp
+      properties:
+        success:
+          type: boolean
+          example: false
+        error:
+          type: object
+          required:
+            - code
+            - message
+          properties:
+            code:
+              type: string
+              description: Error code
+              example: VALIDATION_ERROR
+            message:
+              type: string
+              description: Error message
+              example: Invalid payment request
+            details:
+              type: object
+              description: Additional error details
+              additionalProperties: true
+        correlationId:
+          type: string
+          description: Request correlation ID
+        timestamp:
+          type: string
+          format: date-time
+          description: Response timestamp
+
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+tags:
+  - name: Payments
+    description: Payment management operations
+  - name: Payment Links
+    description: Payment link operations

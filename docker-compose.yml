@@ -1,0 +1,245 @@
+version: '3.8'
+
+services:
+  # Databases
+  postgres-payment:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_DB: payment_service
+      POSTGRES_USER: payment_user
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - postgres_payment_data:/var/lib/postgresql/data
+      - ./scripts/init-db.sql:/docker-entrypoint-initdb.d/init-db.sql
+    ports:
+      - "5432:5432"
+    networks:
+      - fintech-network
+
+  postgres-wallet:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_DB: wallet_service
+      POSTGRES_USER: wallet_user
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - postgres_wallet_data:/var/lib/postgresql/data
+    ports:
+      - "5433:5432"
+    networks:
+      - fintech-network
+
+  eventstore:
+    image: eventstore/eventstore:latest
+    environment:
+      EVENTSTORE_CLUSTER_SIZE: 1
+      EVENTSTORE_RUN_PROJECTIONS: All
+      EVENTSTORE_START_STANDARD_PROJECTIONS: true
+      EVENTSTORE_EXT_TCP_PORT: 1113
+      EVENTSTORE_HTTP_PORT: 2113
+    ports:
+      - "1113:1113"
+      - "2113:2113"
+    volumes:
+      - eventstore_data:/var/lib/eventstore
+    networks:
+      - fintech-network
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - fintech-network
+
+  # Message Queue
+  rabbitmq:
+    image: rabbitmq:3-management-alpine
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD}
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    networks:
+      - fintech-network
+
+  # Services
+  api-gateway:
+    build:
+      context: ./services/api-gateway
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=development
+      - REDIS_URL=redis://redis:6379
+      - PAYMENT_SERVICE_URL=http://payment-service:3001
+      - WALLET_SERVICE_URL=http://wallet-service:3002
+      - LEDGER_SERVICE_URL=http://ledger-service:3003
+      - ANTI_FRAUD_SERVICE_URL=http://anti-fraud-service:3004
+    depends_on:
+      - redis
+      - payment-service
+      - wallet-service
+      - ledger-service
+      - anti-fraud-service
+    networks:
+      - fintech-network
+
+  payment-service:
+    build:
+      context: ./services/payment-service
+      dockerfile: Dockerfile
+    ports:
+      - "3001:3001"
+    environment:
+      - NODE_ENV=development
+      - DATABASE_URL=postgresql://payment_user:${POSTGRES_PASSWORD}@postgres-payment:5432/payment_service
+      - REDIS_URL=redis://redis:6379
+      - RABBITMQ_URL=amqp://${RABBITMQ_USER}:${RABBITMQ_PASSWORD}@rabbitmq:5672
+      - LEDGER_SERVICE_URL=http://ledger-service:3003
+      - ANTI_FRAUD_SERVICE_URL=http://anti-fraud-service:3004
+    depends_on:
+      - postgres-payment
+      - redis
+      - rabbitmq
+      - ledger-service
+      - anti-fraud-service
+    networks:
+      - fintech-network
+
+  ledger-service:
+    build:
+      context: ./services/ledger-service
+      dockerfile: Dockerfile
+    ports:
+      - "3003:3003"
+    environment:
+      - GO_ENV=development
+      - EVENTSTORE_URL=http://eventstore:2113
+      - REDIS_URL=redis://redis:6379
+      - RABBITMQ_URL=amqp://${RABBITMQ_USER}:${RABBITMQ_PASSWORD}@rabbitmq:5672
+    depends_on:
+      - eventstore
+      - redis
+      - rabbitmq
+    networks:
+      - fintech-network
+
+  wallet-service:
+    build:
+      context: ./services/wallet-service
+      dockerfile: Dockerfile
+    ports:
+      - "3002:3002"
+    environment:
+      - JAVA_ENV=development
+      - DATABASE_URL=postgresql://wallet_user:${POSTGRES_PASSWORD}@postgres-wallet:5432/wallet_service
+      - REDIS_URL=redis://redis:6379
+      - LEDGER_SERVICE_URL=http://ledger-service:3003
+    depends_on:
+      - postgres-wallet
+      - redis
+      - ledger-service
+    networks:
+      - fintech-network
+
+  anti-fraud-service:
+    build:
+      context: ./services/anti-fraud-service
+      dockerfile: Dockerfile
+    ports:
+      - "3004:3004"
+    environment:
+      - PYTHON_ENV=development
+      - REDIS_URL=redis://redis:6379
+      - DATABASE_URL=postgresql://payment_user:${POSTGRES_PASSWORD}@postgres-payment:5432/payment_service
+    depends_on:
+      - redis
+      - postgres-payment
+    networks:
+      - fintech-network
+
+  notification-service:
+    build:
+      context: ./services/notification-service
+      dockerfile: Dockerfile
+    ports:
+      - "3005:3005"
+    environment:
+      - NODE_ENV=development
+      - RABBITMQ_URL=amqp://${RABBITMQ_USER}:${RABBITMQ_PASSWORD}@rabbitmq:5672
+      - SMTP_HOST=${SMTP_HOST}
+      - SMTP_PORT=${SMTP_PORT}
+      - SMTP_USER=${SMTP_USER}
+      - SMTP_PASS=${SMTP_PASS}
+    depends_on:
+      - rabbitmq
+    networks:
+      - fintech-network
+
+  # Monitoring
+  prometheus:
+    image: prom/prometheus:latest
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus_data:/prometheus
+    networks:
+      - fintech-network
+
+  grafana:
+    image: grafana/grafana:latest
+    ports:
+      - "3006:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./monitoring/grafana/dashboards:/etc/grafana/provisioning/dashboards
+      - ./monitoring/grafana/datasources:/etc/grafana/provisioning/datasources
+    networks:
+      - fintech-network
+
+  jaeger:
+    image: jaegertracing/all-in-one:latest
+    ports:
+      - "16686:16686"
+      - "14268:14268"
+    environment:
+      - COLLECTOR_OTLP_ENABLED=true
+    networks:
+      - fintech-network
+
+  # Frontend
+  web-frontend:
+    build:
+      context: ./frontend/web
+      dockerfile: Dockerfile
+    ports:
+      - "3010:3000"
+    environment:
+      - REACT_APP_API_URL=http://localhost:3000
+    depends_on:
+      - api-gateway
+    networks:
+      - fintech-network
+
+volumes:
+  postgres_payment_data:
+  postgres_wallet_data:
+  eventstore_data:
+  redis_data:
+  rabbitmq_data:
+  prometheus_data:
+  grafana_data:
+
+networks:
+  fintech-network:
+    driver: bridge
