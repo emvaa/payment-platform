@@ -1,6 +1,5 @@
-import { Payment } from '../../../../shared/types';
 import { Logger } from '../utils/Logger';
-import { Redis } from 'ioredis';
+import { RedisClientType } from 'redis';
 
 export interface IdempotencyRecord {
   idempotencyKey: string;
@@ -11,16 +10,16 @@ export interface IdempotencyRecord {
 }
 
 export class IdempotencyService {
-  private redis: Redis;
+  private redis: RedisClientType;
   private logger: Logger;
   private defaultTTL: number = 86400000; // 24 hours in milliseconds
 
-  constructor(redisClient: Redis, logger: Logger) {
+  constructor(redisClient: RedisClientType, logger: Logger) {
     this.redis = redisClient;
     this.logger = logger;
   }
 
-  async check(idempotencyKey: string): Promise<Payment | null> {
+  async check(idempotencyKey: string): Promise<any | null> {
     try {
       const cached = await this.redis.get(`idempotency:${idempotencyKey}`);
       
@@ -54,7 +53,7 @@ export class IdempotencyService {
     }
   }
 
-  async store(idempotencyKey: string, response: Payment, ttl?: number): Promise<void> {
+  async store(idempotencyKey: string, response: any, ttl?: number): Promise<void> {
     try {
       const record: IdempotencyRecord = {
         idempotencyKey,
@@ -68,7 +67,7 @@ export class IdempotencyService {
       const value = JSON.stringify(record);
       const expireTime = Math.floor((ttl || this.defaultTTL) / 1000); // Convert to seconds
 
-      await this.redis.setex(key, expireTime, value);
+      await this.redis.setEx(key, expireTime, value);
 
       this.logger.info('Idempotency record stored', {
         idempotencyKey,
@@ -106,14 +105,16 @@ export class IdempotencyService {
     try {
       const keys = await this.redis.keys(`idempotency:${pattern}*`);
       
-      if (keys.length > 0) {
-        await this.redis.del(...keys);
-        
-        this.logger.info('Idempotency records invalidated by pattern', {
-          pattern,
-          count: keys.length
-        });
+      let count = 0;
+      for (const key of keys) {
+        await this.redis.del(key);
+        count++;
       }
+      
+      this.logger.info('Idempotency records invalidated by pattern', {
+        pattern,
+        count
+      });
       
     } catch (error) {
       this.logger.error('Error invalidating idempotency records by pattern', {
@@ -210,8 +211,7 @@ export class IdempotencyService {
   async setTTL(idempotencyKey: string, ttl: number): Promise<void> {
     try {
       const key = `idempotency:${idempotencyKey}`;
-      const expireTime = Math.floor(ttl / 1000); // Convert to seconds
-      
+      const expireTime = Math.floor(ttl / 1000);
       await this.redis.expire(key, expireTime);
       
       this.logger.info('Idempotency TTL updated', {

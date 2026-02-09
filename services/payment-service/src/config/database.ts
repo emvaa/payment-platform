@@ -19,12 +19,13 @@ export class DatabasePool {
   private config: DatabaseConfig;
 
   constructor(config?: Partial<DatabaseConfig>) {
+    const parsed = this.parseDatabaseUrl(process.env.DATABASE_URL);
     this.config = {
-      host: config?.host || process.env.DB_HOST || 'localhost',
-      port: config?.port || parseInt(process.env.DB_PORT || '5432'),
-      database: config?.database || process.env.DB_NAME || 'payment_service',
-      username: config?.username || process.env.DB_USER || 'payment_user',
-      password: config?.password || process.env.DB_PASSWORD || '',
+      host: config?.host || parsed?.host || process.env.DB_HOST || 'localhost',
+      port: config?.port || parsed?.port || parseInt(process.env.DB_PORT || '5432'),
+      database: config?.database || parsed?.database || process.env.DB_NAME || 'payment_service',
+      username: config?.username || parsed?.username || process.env.DB_USER || 'payment_user',
+      password: config?.password || parsed?.password || process.env.DB_PASSWORD || '',
       ssl: config?.ssl || process.env.DB_SSL === 'true',
       pool: {
         min: config?.pool?.min || parseInt(process.env.DB_POOL_MIN || '2'),
@@ -53,9 +54,8 @@ export class DatabasePool {
   }
 
   private setupEventHandlers(): void {
-    this.pool.on('connect', (client) => {
+    this.pool.on('connect', () => {
       console.log('New database connection established', {
-        processId: client.processID,
         database: this.config.database
       });
     });
@@ -64,15 +64,12 @@ export class DatabasePool {
       console.error('Database pool error:', err);
     });
 
-    this.pool.on('remove', (client) => {
-      console.log('Database connection removed', {
-        processId: client.processID
-      });
+    this.pool.on('remove', () => {
+      console.log('Database connection removed');
     });
 
-    this.pool.on('acquire', (client) => {
+    this.pool.on('acquire', () => {
       console.log('Database connection acquired', {
-        processId: client.processID,
         totalCount: this.pool.totalCount,
         idleCount: this.pool.idleCount,
         waitingCount: this.pool.waitingCount
@@ -111,5 +108,20 @@ export class DatabasePool {
       idleCount: this.pool.idleCount,
       waitingCount: this.pool.waitingCount
     };
+  }
+
+  private parseDatabaseUrl(url?: string): { host: string; port: number; database: string; username: string; password: string } | null {
+    if (!url) return null;
+    try {
+      const u = new URL(url);
+      const host = u.hostname;
+      const port = parseInt(u.port || '5432');
+      const database = u.pathname.replace('/', '') || 'payment_service';
+      const username = decodeURIComponent(u.username);
+      const password = decodeURIComponent(u.password);
+      return { host, port, database, username, password };
+    } catch {
+      return null;
+    }
   }
 }

@@ -1,0 +1,11 @@
+INSERT INTO users (email, phone, first_name, last_name, date_of_birth, kyc_level, verification_status, risk_score, is_active, login_attempts, password_hash, salt, two_factor_enabled, email_verified, permissions, created_at, updated_at) VALUES
+('juan.perez@email.com', '+1234567890', 'Juan', 'Perez', '1990-01-15', 'BASIC', 'VERIFIED', 0.1000, true, 0, 'hash123', 'salt123', false, true, '["PAYMENTS_SEND", "PAYMENTS_RECEIVE"]', NOW(), NOW()),
+('maria.garcia@email.com', '+1234567891', 'Maria', 'Garcia', '1985-03-22', 'ENHANCED', 'VERIFIED', 0.0500, true, 0, 'hash123', 'salt123', false, true, '["PAYMENTS_SEND", "PAYMENTS_RECEIVE", "WITHDRAWALS"]', NOW(), NOW()),
+('carlos.lopez@email.com', '+1234567892', 'Carlos', 'Lopez', '1988-07-10', 'BASIC', 'VERIFIED', 0.2000, true, 0, 'hash123', 'salt123', false, true, '["PAYMENTS_SEND", "PAYMENTS_RECEIVE"]', NOW(), NOW()),
+('ana.martinez@email.com', '+1234567893', 'Ana', 'Martinez', '1992-11-05', 'PREMIUM', 'VERIFIED', 0.0100, true, 0, 'hash123', 'salt123', true, true, '["PAYMENTS_SEND", "PAYMENTS_RECEIVE", "WITHDRAWALS", "API_ACCESS"]', NOW(), NOW()),
+('pedro.sanchez@email.com', '+1234567894', 'Pedro', 'Sanchez', '1980-05-18', 'BASIC', 'PENDING', 0.3000, true, 0, 'hash123', 'salt123', false, false, '["PAYMENTS_RECEIVE"]', NOW(), NOW()),
+('laura.rodriguez@email.com', '+1234567895', 'Laura', 'Rodriguez', '1995-09-30', 'ENHANCED', 'VERIFIED', 0.0800, true, 0, 'hash123', 'salt123', false, true, '["PAYMENTS_SEND", "PAYMENTS_RECEIVE", "WITHDRAWALS"]', NOW(), NOW()),
+('diego.fernandez@email.com', '+1234567896', 'Diego', 'Fernandez', '1983-12-12', 'BASIC', 'VERIFIED', 0.1500, true, 0, 'hash123', 'salt123', false, true, '["PAYMENTS_SEND", "PAYMENTS_RECEIVE"]', NOW(), NOW()),
+('sofia.torres@email.com', '+1234567897', 'Sofia', 'Torres', '1998-04-25', 'NONE', 'PENDING', 0.5000, true, 0, 'hash123', 'salt123', false, false, '[]', NOW(), NOW()),
+('miguel.ramos@email.com', '+1234567898', 'Miguel', 'Ramos', '1975-08-08', 'PREMIUM', 'VERIFIED', 0.0200, true, 0, 'hash123', 'salt123', true, true, '["PAYMENTS_SEND", "PAYMENTS_RECEIVE", "WITHDRAWALS", "ADMIN"]', NOW(), NOW()),
+('carmen.vazquez@email.com', '+1234567899', 'Carmen', 'Vazquez', '1991-06-20', 'BASIC', 'VERIFIED', 0.1200, true, 0, 'hash123', 'salt123', false, true, '["PAYMENTS_SEND", "PAYMENTS_RECEIVE"]', NOW(), NOW());

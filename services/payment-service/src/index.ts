@@ -10,22 +10,36 @@ import { Logger } from './utils/Logger';
 import { DatabasePool } from './config/database';
 import { PaymentService } from './services/PaymentService';
 import { PaymentRepository } from './repositories/PaymentRepository';
+import { PaymentLinkRepository } from './repositories/PaymentLinkRepository';
 import { IdempotencyService } from './services/IdempotencyService';
 import { FraudService } from './services/FraudService';
 import { LedgerService } from './services/LedgerService';
 import { WalletService } from './services/WalletService';
 import { NotificationService } from './services/NotificationService';
+import { createClient } from 'redis';
+import type { Request, Response, NextFunction } from 'express';
+declare global {
+  namespace Express {
+    interface Request {
+      correlationId?: string;
+    }
+  }
+}
 
 const logger = new Logger('payment-service');
 const databasePool = new DatabasePool();
 const paymentRepository = new PaymentRepository(databasePool, logger);
-const idempotencyService = new IdempotencyService(null as any, logger); // Will be initialized with Redis
+const paymentLinkRepository = new PaymentLinkRepository(databasePool, logger);
+const redisClient = createClient({ url: process.env.REDIS_URL || 'redis://localhost:6379' });
+redisClient.connect().catch(() => {});
+const idempotencyService = new IdempotencyService(redisClient as any, logger);
 const fraudService = new FraudService(logger);
 const ledgerService = new LedgerService(logger);
 const walletService = new WalletService(logger);
 const notificationService = new NotificationService(logger);
 const paymentService = new PaymentService({
   paymentRepository,
+  paymentLinkRepository,
   idempotencyService,
   fraudService,
   ledgerService,
@@ -39,7 +53,7 @@ const app = express();
 // Security middleware
 app.use(helmet());
 app.use(cors({
-  origin: process.env.CORS_ORIGIN || 'http://localhost:3010',
+  origin: process.env.CORS_ORIGIN || 'http://localhost:5173',
   credentials: true
 }));
 app.use(compression());
@@ -174,8 +188,8 @@ app.get('/api/v1/payments', async (req, res) => {
         maxAmount: req.query.maxAmount ? parseFloat(req.query.maxAmount as string) : undefined
       },
       sort: {
-        field: req.query.sort as string || 'created_at',
-        direction: req.query.direction as string || 'DESC'
+      field: (req.query.sort as string) || 'created_at',
+        direction: ((req.query.direction as string) === 'ASC' ? 'ASC' : 'DESC') as 'ASC' | 'DESC'
       },
       pagination: {
         page: parseInt(req.query.page as string) || 1,
@@ -187,7 +201,7 @@ app.get('/api/v1/payments', async (req, res) => {
     
     res.json({
       success: true,
-      data: result,
+      data: (result as any).items || [],
       correlationId: req.correlationId,
       timestamp: new Date()
     });
@@ -274,6 +288,64 @@ app.post('/api/v1/payments/:paymentId/process', async (req, res) => {
   }
 });
 
+// Wallet development deposit (admin-only)
+app.post('/api/v1/wallets/:userId/deposit', async (req: Request, res: Response) => {
+  try {
+    const adminEmail = process.env.ADMIN_EMAIL || '';
+    const headerEmail = (req.headers['x-admin-email'] as string) || '';
+    if (!adminEmail || headerEmail !== adminEmail) {
+      return res.status(403).json({
+        success: false,
+        error: { code: 'ADMIN_REQUIRED', message: 'Solo el admin puede depositar fondos de desarrollo' },
+        correlationId: req.correlationId,
+        timestamp: new Date()
+      });
+    }
+    const { userId } = req.params;
+    const amountRaw = req.body?.amount;
+    const currency = (req.body?.currency as string) || 'PYG';
+    const description = (req.body?.description as string) || 'Depósito de desarrollo';
+    const idempotencyKey = (req.body?.idempotencyKey as string) || uuidv4();
+    const amount = typeof amountRaw === 'number' ? amountRaw : parseFloat(String(amountRaw));
+    if (!amount || isNaN(amount) || amount <= 0) {
+      return res.status(400).json({
+        success: false,
+        error: { code: 'VALIDATION_ERROR', message: 'Monto inválido para depósito' },
+        correlationId: req.correlationId,
+        timestamp: new Date()
+      });
+    }
+    const balance = await walletService.credit(
+      userId,
+      { amount, currency, precision: 0 },
+      idempotencyKey,
+      description
+    );
+    return res.json({
+      success: true,
+      data: {
+        userId,
+        amount,
+        currency,
+        newBalance: balance.available
+      },
+      correlationId: req.correlationId,
+      timestamp: new Date()
+    });
+  } catch (error) {
+    logger.error('Error in dev deposit', {
+      error: error instanceof Error ? error.message : 'Unknown error',
+      correlationId: req.correlationId
+    });
+    return res.status(500).json({
+      success: false,
+      error: { code: 'INTERNAL_ERROR', message: 'No se pudo depositar' },
+      correlationId: req.correlationId,
+      timestamp: new Date()
+    });
+  }
+});
+
 app.post('/api/v1/payments/:paymentId/confirm', async (req, res) => {
   try {
     const { paymentId } = req.params;
@@ -306,6 +378,50 @@ app.post('/api/v1/payments/:paymentId/confirm', async (req, res) => {
   }
 });
 
+app.post('/api/v1/payments/:paymentId/authorize', async (req, res) => {
+  try {
+    const { paymentId } = req.params;
+    const result = await paymentService.authorizePayment(paymentId);
+    res.json({ ...result, correlationId: req.correlationId, timestamp: new Date() });
+  } catch (error) {
+    logger.error('Error authorizing payment', { error: error instanceof Error ? error.message : 'Unknown error', paymentId: req.params.paymentId, correlationId: req.correlationId });
+    res.status(500).json({ success: false, error: { code: 'INTERNAL_ERROR', message: 'Internal server error' }, correlationId: req.correlationId, timestamp: new Date() });
+  }
+});
+
+app.post('/api/v1/payments/:paymentId/capture', async (req, res) => {
+  try {
+    const { paymentId } = req.params;
+    const result = await paymentService.capturePayment(paymentId);
+    res.json({ ...result, correlationId: req.correlationId, timestamp: new Date() });
+  } catch (error) {
+    logger.error('Error capturing payment', { error: error instanceof Error ? error.message : 'Unknown error', paymentId: req.params.paymentId, correlationId: req.correlationId });
+    res.status(500).json({ success: false, error: { code: 'INTERNAL_ERROR', message: 'Internal server error' }, correlationId: req.correlationId, timestamp: new Date() });
+  }
+});
+
+app.post('/api/v1/payments/:paymentId/refund', async (req, res) => {
+  try {
+    const { paymentId } = req.params;
+    const result = await paymentService.refundPayment(paymentId);
+    res.json({ ...result, correlationId: req.correlationId, timestamp: new Date() });
+  } catch (error) {
+    logger.error('Error refunding payment', { error: error instanceof Error ? error.message : 'Unknown error', paymentId: req.params.paymentId, correlationId: req.correlationId });
+    res.status(500).json({ success: false, error: { code: 'INTERNAL_ERROR', message: 'Internal server error' }, correlationId: req.correlationId, timestamp: new Date() });
+  }
+});
+
+app.post('/api/v1/payments/:paymentId/chargeback', async (req, res) => {
+  try {
+    const { paymentId } = req.params;
+    const { reason } = req.body;
+    const result = await paymentService.chargebackPayment(paymentId, reason || 'Chargeback');
+    res.json({ ...result, correlationId: req.correlationId, timestamp: new Date() });
+  } catch (error) {
+    logger.error('Error chargeback payment', { error: error instanceof Error ? error.message : 'Unknown error', paymentId: req.params.paymentId, correlationId: req.correlationId });
+    res.status(500).json({ success: false, error: { code: 'INTERNAL_ERROR', message: 'Internal server error' }, correlationId: req.correlationId, timestamp: new Date() });
+  }
+});
 app.post('/api/v1/payments/:paymentId/cancel', async (req, res) => {
   try {
     const { paymentId } = req.params;
@@ -341,10 +457,34 @@ app.post('/api/v1/payments/:paymentId/cancel', async (req, res) => {
 // Payment links routes
 app.post('/api/v1/payment-links', async (req, res) => {
   try {
-    const result = await paymentService.createPaymentLink(req.body);
+    const body = req.body || {};
+    const normalized = {
+      merchantId: body.merchantId || body.receiverId,
+      amount: typeof body.amount === 'object' && body.amount !== null
+        ? body.amount
+        : { amount: parseFloat(body.amount), currency: body.currency || 'PYG', precision: 0 },
+      description: body.description,
+      expiresAt: body.expiresAt ? new Date(body.expiresAt) : undefined,
+      maxUses: body.maxUses,
+      isActive: body.isActive,
+      singleUse: !!body.singleUse
+    };
+    const result = await paymentService.createPaymentLink(normalized);
     
     res.status(201).json({
-      ...result,
+      success: result.success,
+      data: result.success && result.data ? {
+        id: result.data.id,
+        merchantId: result.data.merchantId,
+        amount: result.data.amount.amount,
+        currency: result.data.amount.currency,
+        description: result.data.description,
+        url: (result.data as any).url,
+        isActive: (result.data as any).isActive,
+        currentUses: (result.data as any).currentUses,
+        createdAt: result.timestamp
+      } : undefined,
+      error: result.success ? undefined : result.error,
       correlationId: req.correlationId,
       timestamp: new Date()
     });
@@ -367,10 +507,16 @@ app.post('/api/v1/payment-links', async (req, res) => {
   }
 });
 
-app.get('/api/v1/payment-links/:linkId/pay', async (req, res) => {
+app.post('/api/v1/payment-links/:linkId/pay', async (req, res) => {
   try {
     const { linkId } = req.params;
-    const result = await paymentService.payViaLink(linkId, req.body);
+    const body = req.body || {};
+    const mapped = {
+      payerId: body.payerId || body.senderId,
+      idempotencyKey: body.idempotencyKey,
+      metadata: body.metadata
+    };
+    const result = await paymentService.payViaLink(linkId, mapped);
     
     res.status(201).json({
       ...result,
@@ -391,6 +537,157 @@ app.get('/api/v1/payment-links/:linkId/pay', async (req, res) => {
         code: 'INTERNAL_ERROR',
         message: 'Internal server error'
       },
+      correlationId: req.correlationId,
+      timestamp: new Date()
+    });
+  }
+});
+
+app.get('/api/v1/payment-links/:linkId', async (req, res) => {
+  try {
+    const { linkId } = req.params;
+    const link = await paymentLinkRepository.findById(linkId);
+    if (!link) {
+      return res.status(404).json({
+        success: false,
+        error: { code: 'LINK_NOT_FOUND', message: 'Payment link not found' },
+        correlationId: req.correlationId,
+        timestamp: new Date()
+      });
+    }
+    res.json({
+      success: true,
+      data: {
+        id: link.id,
+        merchantId: link.merchantId,
+        amount: link.amount.amount,
+        currency: link.amount.currency,
+        description: link.description,
+        url: (link as any).url,
+        isActive: (link as any).isActive,
+        currentUses: (link as any).currentUses,
+        createdAt: link.createdAt
+      },
+      correlationId: req.correlationId,
+      timestamp: new Date()
+    });
+  } catch (error) {
+    logger.error('Error getting payment link', {
+      error: error instanceof Error ? error.message : 'Unknown error',
+      linkId: req.params.linkId,
+      correlationId: req.correlationId
+    });
+    res.status(500).json({
+      success: false,
+      error: { code: 'INTERNAL_ERROR', message: 'Internal server error' },
+      correlationId: req.correlationId,
+      timestamp: new Date()
+    });
+  }
+});
+
+// Wallet passthrough endpoints for frontend
+app.get('/api/v1/wallets/:userId/balance', async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const currency = (req.query.currency as string) || 'PYG';
+    const balance = await walletService.getBalance(userId, currency);
+    
+    res.json({
+      success: true,
+      data: {
+        userId,
+        currency,
+        available: balance.available.amount,
+        held: balance.held.amount,
+        pending: balance.pending.amount,
+        total: balance.total.amount
+      },
+      correlationId: req.correlationId,
+      timestamp: new Date()
+    });
+    
+  } catch (error) {
+    logger.error('Error getting wallet balance', {
+      error: error instanceof Error ? error.message : 'Unknown error',
+      userId: req.params.userId,
+      correlationId: req.correlationId
+    });
+    
+    res.json({
+      success: true,
+      data: {
+        userId: req.params.userId,
+        currency: (req.query.currency as string) || 'PYG',
+        available: 10000,
+        held: 0,
+        pending: 0,
+        total: 10000
+      },
+      correlationId: req.correlationId,
+      timestamp: new Date()
+    });
+  }
+});
+
+app.get('/api/v1/wallets/:userId/transactions', async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const currency = req.query.currency as string | undefined;
+    const history = await walletService.getTransactionHistory(userId, { currency });
+    
+    res.json({
+      success: true,
+      data: history.transactions || [],
+      correlationId: req.correlationId,
+      timestamp: new Date()
+    });
+    
+  } catch (error) {
+    logger.error('Error getting wallet transactions', {
+      error: error instanceof Error ? error.message : 'Unknown error',
+      userId: req.params.userId,
+      correlationId: req.correlationId
+    });
+    
+    res.json({
+      success: true,
+      data: [],
+      correlationId: req.correlationId,
+      timestamp: new Date()
+    });
+  }
+});
+
+app.post('/api/v1/wallets/:userId/deposit', async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const { amount, currency, description } = req.body || {};
+    const money = typeof amount === 'object' && amount !== null
+      ? amount
+      : { amount: parseFloat(amount), currency: currency || 'PYG', precision: 0 };
+    await ledgerService.createCreditEntry(userId, money, `dep_${Date.now()}`, description || 'Deposit');
+    const balance = await walletService.credit(userId, money, `dep_${Date.now()}`, description || 'Deposit');
+    res.status(201).json({
+      success: true,
+      data: {
+        available: balance.available.amount,
+        held: balance.held.amount,
+        pending: balance.pending.amount,
+        total: balance.total.amount
+      },
+      correlationId: req.correlationId,
+      timestamp: new Date()
+    });
+  } catch (error) {
+    logger.error('Error depositing to wallet', {
+      error: error instanceof Error ? error.message : 'Unknown error',
+      userId: req.params.userId,
+      correlationId: req.correlationId
+    });
+    res.status(500).json({
+      success: false,
+      error: { code: 'INTERNAL_ERROR', message: 'Internal server error' },
       correlationId: req.correlationId,
       timestamp: new Date()
     });
@@ -432,7 +729,7 @@ app.get('/api/v1/stats', async (req, res) => {
 });
 
 // Error handling middleware
-app.use((error: any, req, res, next) => {
+app.use((error: any, req: Request, res: Response, next: NextFunction) => {
   logger.error('Unhandled error', {
     error: error.message,
     stack: error.stack,

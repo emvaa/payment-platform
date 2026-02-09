@@ -1,0 +1,156 @@
+Generando estructura del proyecto... por favor espera un poquito. 
+======================================== 
+ESTRUCTURA DE CARPETAS - COSO DE PAGO 
+======================================== 
+ 
+Listado de rutas de carpetas para el volumen Windows
+El número de serie del volumen es CCCC-39DA
+C:.
+|   coso.bat
+|   DEPLOYMENT.md
+|   docker-compose.yml
+|   estructura_proyecto.txt
+|   package.json
+|   PROJECT_COMPLETION.md
+|   QUICK_START.md
+|   README.md
+|   RUN_LOCAL.bat
+|   
++---config
+|       .env
+|       .env.example
+|       
++---docs
+|   +---api
+|   |       payment-api.yaml
+|   |       
+|   \---architecture
+|           system-overview.md
+|           
++---frontend
+|   |   estructura_proyecto.txt
+|   |   
+|   +---mobile
+|   \---web
+|       |   package.json
+|       |   
+|       \---src
+|           |   App.tsx
+|           |   
+|           +---pages
+|           |   +---dashboard
+|           |   |       DashboardPage.tsx
+|           |   |       
+|           |   \---payments
+|           |           SendPaymentPage.tsx
+|           |           
+|           \---store
+|               |   store.ts
+|               |   
+|               \---slices
+|                       authSlice.ts
+|                       
++---infrastructure
+|   +---docker
+|   +---k8s
+|   |       namespace.yaml
+|   |       payment-service-deployment.yaml
+|   |       
+|   \---terraform
+|           main.tf
+|           variables.tf
+|           
++---monitoring
++---scripts
+|   |   deploy.ps1
+|   |   deploy.sh
+|   |   migrate.ps1
+|   |   migrate.sh
+|   |   setup.ps1
+|   |   setup.sh
+|   |   
+|   \---database
+|           migrations.sql
+|           seed.sql
+|           
++---services
+|   +---anti-fraud-service
+|   |   |   requirements.txt
+|   |   |   
+|   |   \---src
+|   |       +---models
+|   |       |       fraud_models.py
+|   |       |       
+|   |       \---services
+|   |               fraud_detection.py
+|   |               
+|   +---api-gateway
+|   +---audit-service
+|   +---auth-service
+|   |   |   package.json
+|   |   |   
+|   |   \---src
+|   |       \---services
+|   |               AuthService.ts
+|   |               
+|   +---ledger-service
+|   |   |   go.mod
+|   |   |   
+|   |   \---internal
+|   |       \---models
+|   |               event.go
+|   |               
+|   +---notification-service
+|   +---payment-service
+|   |   |   package.json
+|   |   |   
+|   |   +---src
+|   |   |   |   index.ts
+|   |   |   |   
+|   |   |   +---config
+|   |   |   |       database.ts
+|   |   |   |       
+|   |   |   +---models
+|   |   |   |       Payment.ts
+|   |   |   |       
+|   |   |   +---repositories
+|   |   |   |       PaymentRepository.ts
+|   |   |   |       
+|   |   |   +---services
+|   |   |   |       FraudService.ts
+|   |   |   |       IdempotencyService.ts
+|   |   |   |       LedgerService.ts
+|   |   |   |       NotificationService.ts
+|   |   |   |       PaymentService.ts
+|   |   |   |       WalletService.ts
+|   |   |   |       
+|   |   |   \---utils
+|   |   |           Logger.ts
+|   |   |           
+|   |   \---tests
+|   |       |   PaymentService.test.ts
+|   |       |   
+|   |       \---integration
+|   |               payment.api.test.ts
+|   |               
+|   +---reconciliation-service
+|   \---wallet-service
+|       \---src
+|           \---main
+|               \---java
+|                   \---com
+|                       \---fintech
+|                           \---wallet
+|                               \---model
+|                                       Wallet.java
+|                                       
++---shared
+|   +---types
+|   |       index.ts
+|   |       
+|   \---utils
+\---tests
+    +---e2e
+    \---integration
+ 
+Finalizado el: s b 07/02/2026 18:28:46,51 

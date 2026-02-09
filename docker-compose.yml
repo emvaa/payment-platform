@@ -78,16 +78,38 @@ services:
     environment:
       - NODE_ENV=development
       - REDIS_URL=redis://redis:6379
+      - AUTH_SERVICE_URL=http://auth-service:3007
       - PAYMENT_SERVICE_URL=http://payment-service:3001
       - WALLET_SERVICE_URL=http://wallet-service:3002
       - LEDGER_SERVICE_URL=http://ledger-service:3003
       - ANTI_FRAUD_SERVICE_URL=http://anti-fraud-service:3004
     depends_on:
       - redis
+      - auth-service
       - payment-service
       - wallet-service
       - ledger-service
       - anti-fraud-service
+    networks:
+      - fintech-network
+
+  auth-service:
+    build:
+      context: ./services/auth-service
+      dockerfile: Dockerfile
+    ports:
+      - "3007:3007"
+    environment:
+      - NODE_ENV=development
+      - PORT=3007
+      - CORS_ORIGIN=http://localhost:5173
+      - REDIS_URL=redis://redis:6379
+      - JWT_SECRET=${JWT_SECRET}
+      - ADMIN_EMAIL=${ADMIN_EMAIL}
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD}
+      - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
+    depends_on:
+      - redis
     networks:
       - fintech-network
 
@@ -104,12 +126,11 @@ services:
       - RABBITMQ_URL=amqp://${RABBITMQ_USER}:${RABBITMQ_PASSWORD}@rabbitmq:5672
       - LEDGER_SERVICE_URL=http://ledger-service:3003
       - ANTI_FRAUD_SERVICE_URL=http://anti-fraud-service:3004
+      - PAYMENT_LINK_BASE_URL=${PAYMENT_LINK_BASE_URL}
     depends_on:
       - postgres-payment
       - redis
       - rabbitmq
-      - ledger-service
-      - anti-fraud-service
     networks:
       - fintech-network
 

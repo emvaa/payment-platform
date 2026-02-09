@@ -1,4 +1,4 @@
-import { Payment, PaymentState, PaymentType, PaymentHold, PaginatedResponse, FilterOptions, SortOptions } from '../../../../shared/types';
+import { PaymentDTO, PaymentState, PaymentType, PaginatedResponse, FilterOptions, SortOptions, PaymentHold } from '../models/types';
 import { PaymentModel } from '../models/Payment';
 import { Logger } from '../utils/Logger';
 import { DatabasePool } from '../config/database';
@@ -13,7 +13,7 @@ export class PaymentRepository {
     this.logger = logger;
   }
 
-  async create(payment: PaymentModel): Promise<Payment> {
+  async create(payment: PaymentModel): Promise<PaymentModel> {
     const client = await this.pool.connect();
     try {
       await client.query('BEGIN');
@@ -24,7 +24,7 @@ export class PaymentRepository {
           description, metadata, idempotency_key, created_at, updated_at,
           completed_at, expires_at, confirmation_code, failure_reason, risk_score
         ) VALUES (
-          $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16
+          $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17
         ) RETURNING *
       `;
       
@@ -79,7 +79,7 @@ export class PaymentRepository {
     }
   }
 
-  async findById(id: string): Promise<Payment | null> {
+  async findById(id: string): Promise<PaymentModel | null> {
     const client = await this.pool.connect();
     try {
       const query = `
@@ -126,7 +126,7 @@ export class PaymentRepository {
     }
   }
 
-  async findByIdempotencyKey(idempotencyKey: string): Promise<Payment | null> {
+  async findByIdempotencyKey(idempotencyKey: string): Promise<PaymentModel | null> {
     const client = await this.pool.connect();
     try {
       const query = `
@@ -173,7 +173,7 @@ export class PaymentRepository {
     }
   }
 
-  async update(payment: PaymentModel): Promise<Payment> {
+  async update(payment: PaymentModel): Promise<PaymentModel> {
     const client = await this.pool.connect();
     try {
       await client.query('BEGIN');
@@ -241,7 +241,7 @@ export class PaymentRepository {
     filters?: FilterOptions;
     sort?: SortOptions;
     pagination?: { page: number; limit: number };
-  }): Promise<PaginatedResponse<Payment>> {
+  }): Promise<PaginatedResponse<PaymentModel>> {
     const client = await this.pool.connect();
     try {
       let whereClause = 'WHERE 1=1';
@@ -342,18 +342,15 @@ export class PaymentRepository {
       const result = await client.query(query, queryParams);
       const payments = result.rows.map(row => this.mapRowToPayment(row));
       
+      const page = options.pagination?.page || 1;
       const totalPages = Math.ceil(total / limit);
-      
+      const hasMore = page < totalPages;
       return {
         items: payments,
-        pagination: {
-          page: options.pagination?.page || 1,
-          limit,
-          total,
-          totalPages,
-          hasNext: (options.pagination?.page || 1) < totalPages,
-          hasPrev: (options.pagination?.page || 1) > 1
-        }
+        total,
+        page,
+        limit,
+        hasMore
       };
       
     } catch (error) {
@@ -366,7 +363,7 @@ export class PaymentRepository {
     }
   }
 
-  async findBySenderId(senderId: string, limit: number = 10): Promise<Payment[]> {
+  async findBySenderId(senderId: string, limit: number = 10): Promise<PaymentModel[]> {
     const client = await this.pool.connect();
     try {
       const query = `
@@ -509,8 +506,8 @@ export class PaymentRepository {
     await client.query(query, values);
   }
 
-  private mapRowToPayment(row: any): Payment {
-    return {
+  private mapRowToPayment(row: any): PaymentModel {
+    const data: PaymentDTO = {
       id: row.id,
       type: row.type as PaymentType,
       state: row.state as PaymentState,
@@ -533,5 +530,6 @@ export class PaymentRepository {
       riskScore: row.risk_score ? parseFloat(row.risk_score) : undefined,
       holds: row.holds || []
     };
+    return PaymentModel.fromJSON(data);
   }
 }

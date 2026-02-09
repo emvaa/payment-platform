@@ -1,0 +1,1 @@
+-- Initialize database`nCREATE EXTENSION IF NOT EXISTS "uuid-ossp";`nCREATE EXTENSION IF NOT EXISTS "pgcrypto";

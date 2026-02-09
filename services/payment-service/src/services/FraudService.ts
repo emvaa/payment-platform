@@ -1,4 +1,4 @@
-import { Payment } from '../../../../shared/types';
+import { Payment } from '../models/types';
 import { Logger } from '../utils/Logger';
 
 export interface FraudAssessment {
@@ -289,7 +289,7 @@ export class FraudService {
       await this.makeRequest('/alerts', 'POST', alert);
       
       this.logger.info('Fraud alert created', {
-        userId,
+        userId: alert.userId,
         assessmentId: alert.assessmentId,
         alertType: alert.alertType,
         severity: alert.severity
@@ -297,7 +297,7 @@ export class FraudService {
       
     } catch (error) {
       this.logger.error('Error creating fraud alert', {
-        userId,
+        userId: alert.userId,
         assessmentId: alert.assessmentId,
         error: error instanceof Error ? error.message : 'Unknown error'
       });

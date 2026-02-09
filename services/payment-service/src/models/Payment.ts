@@ -1,4 +1,4 @@
-import { Payment, PaymentState, PaymentType, Money, PaymentHold } from '../../../shared/types';
+import { Payment, PaymentDTO, PaymentState, PaymentType, Money, PaymentHold } from './types';
 
 export class PaymentModel implements Payment {
   public id: string;
@@ -108,9 +108,9 @@ export class PaymentModel implements Payment {
   }
 
   public canBeRefunded(): boolean {
-    return this.state === PaymentState.COMPLETED && 
-           this.completedAt && 
-           (Date.now() - this.completedAt.getTime()) <= (30 * 24 * 60 * 60 * 1000); // 30 days
+    return this.state === PaymentState.COMPLETED &&
+           !!this.completedAt &&
+           (Date.now() - this.completedAt.getTime()) <= (30 * 24 * 60 * 60 * 1000);
   }
 
   public getAvailableAmount(): Money {
@@ -184,7 +184,7 @@ export class PaymentModel implements Payment {
   }
 
   // Serialization
-  public toJSON(): Payment {
+  public toJSON(): PaymentDTO {
     return {
       id: this.id,
       type: this.type,
@@ -206,7 +206,7 @@ export class PaymentModel implements Payment {
     };
   }
 
-  public static fromJSON(data: Payment): PaymentModel {
+  public static fromJSON(data: PaymentDTO): PaymentModel {
     return new PaymentModel(data);
   }
 }

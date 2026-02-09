@@ -206,7 +206,7 @@ CREATE TABLE IF NOT EXISTS fraud_alerts (
     assessment_id UUID NOT NULL REFERENCES fraud_assessments(id) ON DELETE CASCADE,
     user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     alert_type VARCHAR(50) NOT NULL,
-    severity VARCHAR(20) NOT NULL CHECK (severity IN ('LOW', 'MEDIUM', 'HIGH', 'CRITICAL'),
+    severity VARCHAR(20) NOT NULL CHECK (severity IN ('LOW', 'MEDIUM', 'HIGH', 'CRITICAL')),
     title VARCHAR(255) NOT NULL,
     description TEXT NOT NULL,
     metadata JSONB DEFAULT '{}',
